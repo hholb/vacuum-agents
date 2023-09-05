@@ -16,6 +16,7 @@ public class HahVacuumAgentDriver extends VacuumAgentDriver {
 
     try {
       fh = new FileHandler("sim.log", true);
+      fh.setFormatter(new SimpleFormatter());
       logger.addHandler(fh);
       logger.setLevel(Level.ALL);
 
@@ -57,7 +58,7 @@ public class HahVacuumAgentDriver extends VacuumAgentDriver {
 
         int count = 1;
         for (VacuumTrace entry : trace) {
-          System.out.printf("%d: %s", count, entry);
+          //System.out.printf("%d: %s", count, entry);
           logger.log(Level.INFO, String.format("%d: %s", count, entry));
           count++;
         }
