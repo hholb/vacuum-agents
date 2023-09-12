@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# by Hayden Holbrook <hholbroo@unca.edu>
+
+set -e
+
+pushd ./logs 2>&1 1>/dev/null
+
+for file in *.log; do
+    echo "Cleaning log $file..."
+    sed '/\(Sep\|^$\)/d; s/INFO: //' "$file" >> "$file.cln"
+done
+
+popd 2>&1 1>/dev/null
+exit 0
