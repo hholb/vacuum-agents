@@ -10,15 +10,14 @@ public class HahVacuumAgentDriver extends VacuumAgentDriver {
 
   private static Logger logger = Logger.getLogger("logger");
 
-  public static void main(String[] args) {
-
-    FileHandler fh;
+  private static void runSimulation(int simNumber, String[] args) {
 
     try {
-      fh = new FileHandler("sim.log", true);
+      FileHandler fh = new FileHandler(String.format("logs/%03d_sim.log", simNumber), true);
       fh.setFormatter(new SimpleFormatter());
       logger.addHandler(fh);
       logger.setLevel(Level.ALL);
+      logger.log(Level.INFO, String.format("Simulation Number %d\n", numSims));
 
       // parse and set parameters using command line args
       parseCommandLine(args);
@@ -35,6 +34,7 @@ public class HahVacuumAgentDriver extends VacuumAgentDriver {
 
       // initialize environment
       VacuumEnvironment vEnviron;
+      geometry = null;
       if (geometry == null) {
         vEnviron = new VacuumEnvironment(maxWidth, maxHeight, dirtProb, agent, agentX, agentY);
       } else {
@@ -49,23 +49,26 @@ public class HahVacuumAgentDriver extends VacuumAgentDriver {
       }
       int timeSteps = vEnviron.simulate(maxTimeSteps, targetPerformance, usePercept);
       trace = vEnviron.getTrace();
-      if (useVisualizer) {
-        System.out.println("Visualizer on");
-        visualize();
-      } else {
-        System.out.println("Final Environment:");
-        System.out.println(vEnviron);
+      System.out.println("Final Environment:");
+      System.out.println(vEnviron);
 
-        int count = 1;
-        for (VacuumTrace entry : trace) {
-          //System.out.printf("%d: %s", count, entry);
-          logger.log(Level.INFO, String.format("%d: %s", count, entry));
-          count++;
-        }
+      int count = 1;
+      for (VacuumTrace entry : trace) {
+        // System.out.printf("%d: %s", count, entry);
+        logger.log(Level.INFO, String.format("%d: %s", count, entry));
+        count++;
       }
+      logger.removeHandler(fh);
+      fh.close();
     } catch (Exception e) {
       System.err.println("Something went wrong.");
       System.exit(1);
+    }
+  }
+
+  public static void main(String[] args) {
+    for (int i = 1; i <= numSims; i++) {
+      runSimulation(i, args);
     }
   } // main
 }

@@ -17,6 +17,7 @@ public class VacuumAgentDriver {
     static double dirtProb = 1.0;
     static int maxTimeSteps = -1;
     static double targetPerformance = 1.5;
+    static int numSims = 1; // number of simulations to run
 
     static boolean useVisualizer = false;
     static boolean setAgentLocRandomly = true;
@@ -42,7 +43,9 @@ public class VacuumAgentDriver {
         B("          : Use BUMP percept for agent simulation"),
         L("          : Use LOCATION percept for agent simulation"),
         v("          : Use visualizer"),
-        A("className : Implement agent using className.class");
+        A("className : Implement agent using className.class"),
+        n("n          : Number of simulation runs");
+
         String helpString;
 
         OPTIONS(String hStr) {
@@ -245,7 +248,15 @@ public class VacuumAgentDriver {
                         }
                         argPos++;
                         break;
-
+                    case n:
+                        intResult = checkInts(args, argPos, 1);
+                        if (intResult == null) {
+                            parseError = true;
+                        } else {
+                            numSims = intResult[0];
+                        }
+                        argPos++;
+                        break;
                 }
 
             } else {
