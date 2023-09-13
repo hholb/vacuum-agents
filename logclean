@@ -6,9 +6,11 @@ set -e
 pushd ./logs 2>&1 1>/dev/null
 
 for file in *.log; do
-    echo "Cleaning log $file..."
-    # remove date stamp lines and emtpy lines
-    sed '/\(Sep\|^$\)/d; s/INFO: //' "$file" >> "$file.cln"
+    if [[ -f "$file" ]]; then
+	echo "Cleaning log $file..."
+	# remove date stamp lines and emtpy lines
+	sed '/\(Sep\|^$\)/d; s/INFO: //' "$file" >> "$file.cln"
+    fi
 done
 
 popd 2>&1 1>/dev/null
