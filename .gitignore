@@ -22,3 +22,6 @@ gradle-app.setting
 
 *.vim
 *.log
+
+bin/
+logs/
