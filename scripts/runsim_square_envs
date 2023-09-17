@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# Run the simulation 10 times for the each agent type on different sized
+# environments. The results are saved in a csv file called results.csv
+
+CSV_FILE="results.csv"
+AGENTS=( "HahRandomAgent" "HahVacuumModelReflexBumpAgent" )
+ENVIRONMENT_SIZE=3
+NUM_RUNS=10
+
+if ! [[ -f $CSV_FILE ]]; then
+	echo "Environment Size,Agent Type,Run Number,Time Steps, Score" > $CSV_FILE
+fi
+
+for (( i=1; i<=$NUM_RUNS; i++ )); do
+	for agent in "${AGENTS[@]}"; do
+		for (( j=$ENVIRONMENT_SIZE; j<=$NUM_RUNS; j++ )); do
+			echo "Running simulation $i for $agent on $j x $j environment..."
+			output=`gradlew -q run --args="-d $j $j -A $agent"`
+			# score should be final field of last line of output,
+			score=`echo "$output" | tail -n 1 | awk '{print $NF}'`
+			# final time step shoudl be the first field of the last line of output
+			time_steps=`echo "$output" | tail -n 1 | awk '{print $1}'`
+			echo "$j,$agent,$i,$time_steps,$score" >> $CSV_FILE
+		done
+	done
+done

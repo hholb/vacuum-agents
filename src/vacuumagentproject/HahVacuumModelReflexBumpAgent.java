@@ -18,7 +18,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	private Set<Cell> knownCells;
 	private Set<Cell> blockedCells;
 	private int timeStep;
-	private static final int MAX_DEPTH = 2500; // maximum path-length for search
+	private static final int MAX_DEPTH = 2500; // maximum depth for search
 
 
 	public HahVacuumModelReflexBumpAgent() {
