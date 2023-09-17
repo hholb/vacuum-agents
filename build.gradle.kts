@@ -25,7 +25,7 @@ sourceSets {
 }
 
 application {
-	mainClass.set("vacuumagentproject.HahVacuumAgentDriver")
+	mainClass.set("vacuumagentproject.VacuumAgentDriver")
 }
 
 tasks.register("hello") {

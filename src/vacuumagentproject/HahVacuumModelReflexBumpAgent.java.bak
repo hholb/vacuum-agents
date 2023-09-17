@@ -1,0 +1,316 @@
+package vacuumagentproject;
+
+/**
+ * @author Hayden Holbrook
+ */
+import java.util.*;
+
+public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
+
+  PriorityQueue<Cell> unvisitedCells; // cells we know are not blocked and unvisited
+  ArrayList<Cell> visitedCells; // cells we have visited, including blocked cells
+  ArrayDeque<VacuumAction> moves; // sequence of moves to next goal cell
+  Location robotLocation; // current location of the robot
+  Location goalLocation; // current goal location of the robot
+
+  public HahVacuumModelReflexBumpAgent() {
+    super();
+    this.unvisitedCells = new PriorityQueue<>(new CellComparator());
+    this.visitedCells = new ArrayList<>();
+    this.moves = new ArrayDeque<>();
+
+    // initialize starting cells
+    Cell origin = new Cell(new Location(0, 0));
+    origin.visited = true;
+    origin.clean = true;
+    visitedCells.add(origin);
+
+    Cell north = new Cell(new Location(0, 1));
+    Cell east = new Cell(new Location(1, 0));
+    Cell south = new Cell(new Location(0, -1));
+    Cell west = new Cell(new Location(-1, 0));
+    unvisitedCells.add(north);
+    unvisitedCells.add(east);
+    unvisitedCells.add(south);
+    unvisitedCells.add(west);
+
+    robotLocation = origin.location;
+  }
+
+  VacuumAction getTransition() {
+    if (!moves.isEmpty()) return moves.getFirst();
+    else return VacuumAction.STOP;
+  }
+
+  Location getGoalLocation() {
+    Cell goalCell = unvisitedCells.poll();
+    return goalCell.location;
+  }
+
+  boolean[] getBumpMap(VacuumBumpPercept percept) {
+    boolean[] bumpMap = new boolean[4];
+    bumpMap[0] = percept.willBump(VacuumAction.FORWARD);
+    bumpMap[1] = percept.willBump(VacuumAction.RIGHT);
+    bumpMap[2] = percept.willBump(VacuumAction.BACK);
+    bumpMap[3] = percept.willBump(VacuumAction.LEFT);
+    return bumpMap;
+  }
+
+  void senseBumps(VacuumBumpPercept percept) {
+    // update cells blocked attribute based on percept data
+    boolean[] bumpMap = getBumpMap(percept);
+    for (int i = 0; i < bumpMap.length; i++) {
+      if (bumpMap[i]) {
+        // get the cell at the corresponding location
+        Location location = getAdjacentLocations(robotLocation).get(i);
+        Cell cell = null;
+        for (Cell c : visitedCells) {
+          if (c != null && c.location.equals(location)) {
+            cell = c;
+            break;
+          }
+        }
+        // update the cell's blocked attribute
+	if (cell != null)
+	    cell.blocked = true;
+      }
+    }
+  }
+
+  void updateCells(VacuumAction move) {
+    for (Cell cell : visitedCells) {
+      if (cell.location.equals(robotLocation)) {
+        cell.visited = true;
+        cell.clean = true;
+      } else {
+        cell.updateDistanceFromRobot(robotLocation);
+      }
+    }
+
+    for (Cell cell : unvisitedCells) {
+      if (cell.location.equals(robotLocation)) {
+        cell.visited = true;
+        cell.clean = true;
+      } else {
+        cell.updateDistanceFromRobot(robotLocation);
+      }
+    }
+    updateUnvisitedCellDistances();
+  }
+
+  void updateRobotLocation(VacuumAction move) {
+    if (move == VacuumAction.FORWARD) {
+      robotLocation.y++;
+    } else if (move == VacuumAction.RIGHT) {
+      robotLocation.x++;
+    } else if (move == VacuumAction.BACK) {
+      robotLocation.y--;
+    } else if (move == VacuumAction.LEFT) {
+      robotLocation.x--;
+    }
+  }
+
+  void updateUnvisitedCellDistances() {
+    // Create a temporary priority queue to hold updated cells
+    PriorityQueue<Cell> updatedUnvisitedCells = new PriorityQueue<>(8, new CellComparator());
+
+    // Update distances for unvisited cells and add them to the temporary queue
+    for (Cell cell : unvisitedCells) {
+      cell.updateDistanceFromRobot(robotLocation);
+      updatedUnvisitedCells.add(cell);
+    }
+
+    // Replace the original priority queue with the updated one
+    unvisitedCells = updatedUnvisitedCells;
+  }
+
+  void populateMoves() {
+	    // Clear the existing move queue
+	    this.moves.clear();
+
+	    // Create a queue for BFS traversal
+	    Queue<Location> queue = new LinkedList<>();
+	    // Create a set to keep track of visited locations
+	    Set<Location> visitedLocations = new HashSet<>();
+	    // Create a map to keep track of the parent cell for each location
+	    Map<Location, Location> parentMap = new HashMap<>();
+
+	    // Start BFS from the robot's current location
+	    queue.add(robotLocation);
+	    visitedLocations.add(robotLocation);
+	    parentMap.put(robotLocation, null);
+
+	    Location currentLocation = null;
+
+	    // Perform BFS
+	    while (!queue.isEmpty()) {
+	        currentLocation = queue.poll();
+
+	        // Explore all adjacent cells (up, down, left, right)
+	        for (Location adjacent : getAdjacentLocations(currentLocation)) {
+	            // Check if the adjacent location is valid and has not been visited
+	            if (isValidLocation(adjacent) && !visitedLocations.contains(adjacent)) {
+	                // Check if the adjacent location is not blocked
+	                if (!isBlocked(adjacent)) {
+	                    // Add the adjacent location to the queue, mark it as visited, and set its parent
+	                    queue.add(adjacent);
+	                    visitedLocations.add(adjacent);
+	                    parentMap.put(adjacent, currentLocation);
+	                }
+	            }
+	        }
+	    }
+
+	    // Reconstruct the path by backtracking from the goal to the robot's location
+	    List<Location> path = new ArrayList<>();
+	    currentLocation = goalLocation; // Start from the goal location
+	    while (currentLocation != null) {
+	        path.add(currentLocation);
+	        currentLocation = parentMap.get(currentLocation);
+	    }
+
+	    // Reverse the path to get the correct sequence of moves
+	    Collections.reverse(path);
+
+	    // Convert the path into a sequence of moves and add them to the 'moves' queue
+	    for (int i = 1; i < path.size(); i++) {
+	        Location from = path.get(i - 1);
+	        Location to = path.get(i);
+	        VacuumAction move = determineMove(from, to);
+	        moves.add(move);
+	    }
+	}
+
+
+
+  List<Location> getAdjacentLocations(Location location) {
+    List<Location> adjacentLocations = new ArrayList<>();
+    adjacentLocations.add(new Location(location.x, location.y + 1));
+    adjacentLocations.add(new Location(location.x + 1, location.y));
+    adjacentLocations.add(new Location(location.x, location.y - 1));
+    adjacentLocations.add(new Location(location.x - 1, location.y));
+    return adjacentLocations;
+  }
+
+  boolean isValidLocation(Location location) {
+    // Check if the location is blocked
+    for (Cell cell : visitedCells) {
+      if (cell.location.equals(location) && cell.blocked) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  boolean isBlocked(Location location) {
+    // Iterate through the visited cells to find the corresponding cell at the given
+    // location
+    for (Cell cell : visitedCells) {
+      if (cell.location.equals(location)) {
+        return cell.blocked;
+      }
+    }
+
+    // If the cell at the given location is not found in visitedCells, consider it
+    // unblocked
+    return false;
+  }
+
+  VacuumAction determineMove(Location from, Location to) {
+    if (to.y > from.y) {
+      return VacuumAction.FORWARD;
+    } else if (to.x > from.x) {
+      return VacuumAction.RIGHT;
+    } else if (to.y < from.y) {
+      return VacuumAction.BACK;
+    } else if (to.x < from.x) {
+      return VacuumAction.LEFT;
+    } else {
+      return VacuumAction.STOP;
+    }
+  }
+
+  @Override
+  public VacuumAction getAction(VacuumPercept percept) {
+    if (percept instanceof VacuumBumpPercept)
+      return getActionModelReflex((VacuumBumpPercept) percept);
+    else {
+      System.out.println("Error:  Expected a Bump Percept!!");
+      return VacuumAction.STOP;
+    }
+  }
+
+  /** This gets called on every step of the simulation */
+  private VacuumAction getActionModelReflex(VacuumBumpPercept percept) {
+    if (percept.currentStatus == Status.DIRTY) {
+      return VacuumAction.SUCK;
+    } else if (goalLocation == null) {
+      updateUnvisitedCellDistances();
+      goalLocation = getGoalLocation();
+      populateMoves();
+      return getTransition();
+    } else if (moves.size() > 0){
+      VacuumAction nextMove = getTransition();
+      updateRobotLocation(nextMove);
+      updateCells(nextMove);
+      return nextMove;
+    } else {
+    	return VacuumAction.STOP;
+    }
+  }
+
+  private class Cell {
+    boolean clean;
+    boolean blocked;
+    boolean visited;
+    Location location;
+    int distanceFromRobot;
+
+    public Cell(Location address) {
+      this.location = new Location(address.x, address.y);
+      this.clean = false;
+      this.blocked = false;
+      this.visited = false;
+      this.distanceFromRobot = 0;
+    }
+
+    public Cell(Location address, boolean blocked) {
+      this.location = new Location(address.x, address.y);
+      this.clean = false;
+      this.blocked = blocked;
+      this.visited = (blocked) ? true : false;
+      this.distanceFromRobot = 0;
+    }
+
+    public void updateDistanceFromRobot(Location robotLocation) {
+      int xDistance = Math.abs(robotLocation.x - this.location.x);
+      int yDistance = Math.abs(robotLocation.y - this.location.y);
+      this.distanceFromRobot = xDistance + yDistance;
+    }
+
+    public int getDistanceFromRobot() {
+      return this.distanceFromRobot;
+    }
+  }
+
+  private class CellComparator implements Comparator<Cell> {
+    public int compare(Cell a, Cell b) {
+      return a.getDistanceFromRobot() - b.getDistanceFromRobot();
+    }
+  }
+
+  private class Location {
+    int x;
+    int y;
+
+    public Location(int x, int y) {
+      this.x = x;
+      this.y = y;
+    }
+
+    public boolean equals(Location other) {
+      return this.x == other.x && this.y == other.y;
+    }
+  }
+}
