@@ -16,6 +16,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	ArrayDeque<Cell> path; // path from vacuum to goal
 	Set<Cell> visitedCells;
 	Set<Cell> knownCells;
+	Set<Cell> blockedCells;
 	private int timeStep;
 
 	public HahVacuumModelReflexBumpAgent() {
@@ -23,7 +24,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		grid = new Cell[1000][1000];
 		for (int i = 0; i < 1000; i++) {
 			for (int j = 0; j < 1000; j++) {
-				grid[i][j] = new Cell(i, j, CellStatus.UNVISITED);
+				grid[i][j] = new Cell(i, j);
 			}
 		}
 		x = 500;
@@ -35,21 +36,21 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		path = new ArrayDeque<Cell>();
 		visitedCells = new HashSet<>();
 		knownCells = new HashSet<>();
+		blockedCells = new HashSet<>();
 	}
 
 	// Set a maximum depth for pathfinding
-	private static final int MAX_DEPTH = 250;
+	private static final int MAX_DEPTH = 2500;
 
 	public void buildPathToGoal() {
 		path.clear();
 		clearCellPathfindingFields();
-
 		// build a path to the goalCell using shortest path through known cells
 		// using a priority queue to store cells to visit
-		// cells are ordered by their depth, with cells closer to the goal having higher priority
+		// cells are ordered by their depth, with cells closer to the goal having higher  priority
 		// cells are visited in order of priority
 		PriorityQueue<Cell> queue = new PriorityQueue<>(new CellComparator());
-		Set<Cell> visited = new HashSet<>();
+		Set<Cell> visited = new HashSet<>(); // cells visited during this search
 		queue.add(currentCell);
 		while (!queue.isEmpty()) {
 			Cell c = queue.remove();
@@ -68,15 +69,15 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 				break;
 			}
 			for (Cell neighbor : getNeighbors(c)) {
-				if (neighbor.status != CellStatus.BLOCKED && !visited.contains(neighbor)) {
+				if (knownCells.contains(neighbor) && !blockedCells.contains(neighbor) && !visited.contains(neighbor)) {
 					// if the neighbor is not blocked and has not been visited, add it to the queue
 					neighbor.parent = c;
-					neighbor.depth = updateDepth(neighbor);
+					neighbor.depth = calculateDepth(c, neighbor);
 					queue.add(neighbor);
 				}
 			}
 		}
-		
+
 		// Print path for debugging
 		StringBuilder s = new StringBuilder();
 		s.append("PATH: ");
@@ -90,30 +91,35 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		List<Cell> neighbors = new ArrayList<>();
 		int x = cell.x;
 		int y = cell.y;
-		Cell left = grid[x - 1][y];
-		Cell right = grid[x + 1][y];
-		Cell forward = grid[x][y - 1];
-		Cell back = grid[x][y + 1];
+		
 
 		if (x > 0) {
+			Cell left = grid[x - 1][y];
 			neighbors.add(left);
 		}
 		if (x < 999) {
+			Cell right = grid[x + 1][y];
 			neighbors.add(right);
 		}
 		if (y > 0) {
+			Cell forward = grid[x][y - 1];
 			neighbors.add(forward);
 		}
 		if (y < 999) {
+			Cell back = grid[x][y + 1];
 			neighbors.add(back);
 		}
 
 		return neighbors;
 	}
-	
+
 	public int updateDepth(Cell c) {
-	    // set cell depth based on its absolute distance from the current cell
-	    return Math.abs(c.x - x) + Math.abs(c.y - y);
+		// set cell depth based on its absolute distance from the current cell
+		return Math.abs(c.x - x) + Math.abs(c.y - y);
+	}
+	
+	public int calculateDepth(Cell c1, Cell c2) {
+		return Math.abs(c1.x - c2.x) + Math.abs(c1.y - c2.y);
 	}
 
 	public void clearCellPathfindingFields() {
@@ -125,11 +131,8 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 
 	public void updateGoalCell() {
 		// choose a new goal cell from the frontier
-		// Clear path and cell pathfinding fields before updating goalCell
-		path.clear();
-		clearCellPathfindingFields();
 		updateFrontier();
-		if(!frontier.isEmpty())
+		if (!frontier.isEmpty())
 			goalCell = frontier.remove();
 		System.out.println("New Goal Cell: (" + goalCell.x + ", " + goalCell.y + ")");
 	}
@@ -137,7 +140,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	public void updateFrontier() {
 		frontier.clear();
 		for (Cell c : knownCells) {
-			if (!visitedCells.contains(c) && c.status != CellStatus.BLOCKED) {
+			if (!visitedCells.contains(c) && !blockedCells.contains(c)) {
 				frontier.add(c);
 			}
 		}
@@ -179,22 +182,22 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 
 		// check neighbors for blocked cells
 		if (percept.willBump(VacuumAction.LEFT)) {
-			left.status = CellStatus.BLOCKED;
+			blockedCells.add(left);
 		}
 		knownCells.add(left);
 
 		if (percept.willBump(VacuumAction.RIGHT)) {
-			right.status = CellStatus.BLOCKED;
+			blockedCells.add(right);
 		}
 		knownCells.add(right);
 
 		if (percept.willBump(VacuumAction.FORWARD)) {
-			forward.status = CellStatus.BLOCKED;
+			blockedCells.add(forward);
 		}
 		knownCells.add(forward);
 
 		if (percept.willBump(VacuumAction.BACK)) {
-			back.status = CellStatus.BLOCKED;
+			blockedCells.add(back);
 		}
 		knownCells.add(back);
 	}
@@ -212,9 +215,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	/** This gets called on every step of the simulation */
 	private VacuumAction getActionModelReflex(VacuumBumpPercept percept) {
 		System.out.printf("Time: %d\n", timeStep++);
-		// mark current cell as visited
 		currentCell = grid[x][y];
-		currentCell.status = CellStatus.VISITED;
 		knownCells.add(currentCell);
 		visitedCells.add(currentCell);
 
@@ -235,6 +236,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 			buildPathToGoal();
 		}
 		VacuumAction action = getNextMove();
+		System.out.println("MOVING: " + action.name());
 		return action;
 	}
 
@@ -243,13 +245,11 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		public int y;
 		public int depth;
 		public Cell parent;
-		public CellStatus status;
 
-		public Cell(int x, int y, CellStatus status) {
+		public Cell(int x, int y) {
 			this.x = x;
 			this.y = y;
 			this.depth = 0;
-			this.status = status;
 		}
 
 		@Override
@@ -265,9 +265,5 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 			// closer cells having higher priority
 			return Math.abs(c1.x - x) + Math.abs(c1.y - y) - Math.abs(c2.x - x) - Math.abs(c2.y - y);
 		}
-	}
-
-	private enum CellStatus {
-		UNVISITED, VISITED, BLOCKED,
 	}
 }
