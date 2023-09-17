@@ -7,273 +7,267 @@ import java.util.*;
 
 public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 
-  private Cell[][] grid;
-  private int x;
-  private int y;
-  Cell currentCell;
-  Cell goalCell;
-  PriorityQueue<Cell> frontier; // ordered by distance from current cell, rebuilt as needed
-  ArrayDeque<Cell> path; // path from vacuum to goal
-  Set<Cell> visitedCells;
-  Set<Cell> knownCells;
-  private int timeStep;
+	private Cell[][] grid;
+	private int x;
+	private int y;
+	Cell currentCell;
+	Cell goalCell;
+	PriorityQueue<Cell> frontier; // ordered by distance from current cell, rebuilt as needed
+	ArrayDeque<Cell> path; // path from vacuum to goal
+	Set<Cell> visitedCells;
+	Set<Cell> knownCells;
+	private int timeStep;
 
-  public HahVacuumModelReflexBumpAgent() {
-    super();
-    grid = new Cell[1000][1000];
-    for (int i = 0; i < 1000; i++) {
-      for (int j = 0; j < 1000; j++) {
-        grid[i][j] = new Cell(i, j, CellStatus.UNVISITED);
-      }
-    }
-    x = 500;
-    y = 500;
-    currentCell = grid[x][y];
-    goalCell = currentCell;
-    timeStep = 0;
-    frontier =
-        new PriorityQueue<Cell>(
-            new Comparator<Cell>() {
-              @Override
-              public int compare(Cell c1, Cell c2) {
-                return (Math.abs(c1.x - goalCell.x) + Math.abs(c1.y - goalCell.y))
-                    - (Math.abs(c2.x - goalCell.x) + Math.abs(c2.y - goalCell.y));
-              }
-            });
-
-    path = new ArrayDeque<Cell>();
-    visitedCells = new HashSet<>();
-    knownCells = new HashSet<>();
-  }
-
-  public void buildPathToGoal() {
-	    // Build a path between currentCell and goalCell
-	    // through known cells that are not blocked using IDBFS
-
-	    // Initialize depth limit to 1
-	    int depthLimit = 1;
-
-	    while (true) {
-	        // Perform a breadth-first search with the current depth limit
-	        boolean pathFound = IDBFS(depthLimit);
-
-	        if (pathFound) {
-	            break; // Exit the loop if a path is found
-	        }
-
-	        // Increase the depth limit for the next iteration
-	        depthLimit++;
-	    }
-
-	    System.out.println("Path to goal:");
-	    for (Cell cell : path) {
-	        System.out.println("(" + cell.x + ", " + cell.y + ")");
-	    }
-	    clearCellPathfindingFields();
+	public HahVacuumModelReflexBumpAgent() {
+		super();
+		grid = new Cell[1000][1000];
+		for (int i = 0; i < 1000; i++) {
+			for (int j = 0; j < 1000; j++) {
+				grid[i][j] = new Cell(i, j, CellStatus.UNVISITED);
+			}
+		}
+		x = 500;
+		y = 500;
+		currentCell = grid[x][y];
+		goalCell = currentCell;
+		timeStep = 0;
+		frontier = new PriorityQueue<>(new CellComparator());
+		path = new ArrayDeque<Cell>();
+		visitedCells = new HashSet<>();
+		knownCells = new HashSet<>();
 	}
 
-	public boolean IDBFS(int depthLimit) {
-	    Queue<Cell> queue = new LinkedList<>();
-	    Set<Cell> visitedCells = new HashSet<>();
+	// Set a maximum depth for pathfinding
+	private static final int MAX_DEPTH = 250;
 
-	    queue.add(currentCell);
-	    visitedCells.add(currentCell);
+	public void buildPathToGoal() {
+		path.clear();
+		clearCellPathfindingFields();
 
-	    while (!queue.isEmpty()) {
-	        Cell cell = queue.poll();
-
-	        if (cell == goalCell) {
-	            // Reconstruct the path
-	            while (cell != currentCell) {
-	                path.push(cell);
-	                cell = cell.parent;
-	            }
-	            return true; // Path found
-	        }
-
-	        if (cell.parent != null) {
-	            visitedCells.add(cell.parent); // Mark the parent as visited
-	        }
-
-	        if (cell.parent == null || cell.parent != currentCell) {
-	            // If the cell's parent is not the current cell, it's a new level
-	            if (cell.depth < depthLimit) {
-	                // Explore neighbors only if depth is within the limit
-	                for (Cell neighbor : getNeighbors(cell)) {
-	                    if (!visitedCells.contains(neighbor)) {
-	                        neighbor.parent = cell;
-	                        neighbor.depth = cell.depth + 1;
-	                        queue.add(neighbor);
-	                    }
-	                }
-	            }
-	        }
-	    }
-
-	    return false; // Path not found within the depth limit
+		// build a path to the goalCell using shortest path through known cells
+		// using a priority queue to store cells to visit
+		// cells are ordered by their depth, with cells closer to the goal having higher priority
+		// cells are visited in order of priority
+		PriorityQueue<Cell> queue = new PriorityQueue<>(new CellComparator());
+		Set<Cell> visited = new HashSet<>();
+		queue.add(currentCell);
+		while (!queue.isEmpty()) {
+			Cell c = queue.remove();
+			visited.add(c);
+			if (c == goalCell) {
+				// build path from goalCell to currentCell
+				Cell cell = goalCell;
+				while (cell != currentCell) {
+					path.addFirst(cell);
+					cell = cell.parent;
+				}
+				break;
+			}
+			if (c.depth > MAX_DEPTH) {
+				// if the cell is too far away, stop searching
+				break;
+			}
+			for (Cell neighbor : getNeighbors(c)) {
+				if (neighbor.status != CellStatus.BLOCKED && !visited.contains(neighbor)) {
+					// if the neighbor is not blocked and has not been visited, add it to the queue
+					neighbor.parent = c;
+					neighbor.depth = updateDepth(neighbor);
+					queue.add(neighbor);
+				}
+			}
+		}
+		
+		// Print path for debugging
+		StringBuilder s = new StringBuilder();
+		s.append("PATH: ");
+		for (Cell cell : path) {
+			s.append(cell);
+		}
+		System.out.println(s);
 	}
 
 	public List<Cell> getNeighbors(Cell cell) {
-	    List<Cell> neighbors = new ArrayList<>();
+		List<Cell> neighbors = new ArrayList<>();
+		int x = cell.x;
+		int y = cell.y;
+		Cell left = grid[x - 1][y];
+		Cell right = grid[x + 1][y];
+		Cell forward = grid[x][y - 1];
+		Cell back = grid[x][y + 1];
 
-	    int x = cell.x;
-	    int y = cell.y;
+		if (x > 0) {
+			neighbors.add(left);
+		}
+		if (x < 999) {
+			neighbors.add(right);
+		}
+		if (y > 0) {
+			neighbors.add(forward);
+		}
+		if (y < 999) {
+			neighbors.add(back);
+		}
 
-	    if (x > 0) {
-	        neighbors.add(grid[x - 1][y]);
-	    }
-	    if (x < 999) {
-	        neighbors.add(grid[x + 1][y]);
-	    }
-	    if (y > 0) {
-	        neighbors.add(grid[x][y - 1]);
-	    }
-	    if (y < 999) {
-	        neighbors.add(grid[x][y + 1]);
-	    }
-
-	    return neighbors;
+		return neighbors;
+	}
+	
+	public int updateDepth(Cell c) {
+	    // set cell depth based on its absolute distance from the current cell
+	    return Math.abs(c.x - x) + Math.abs(c.y - y);
 	}
 
-  public void clearCellPathfindingFields() {
-    for (Cell c : visitedCells) {
-      c.parent = null;
-      c.depth = 0;
-    }
-  }
-
-  public void updateGoalCell() {
-    // choose a new goal cell from the frontier
-    // if the frontier is empty, there is nowhere to go
-    if (frontier.isEmpty()) {
-      return;
-    } else {
-      goalCell = frontier.remove();
-    }
-    System.out.println("New Goal Cell: (" + goalCell.x + ", " + goalCell.y + ")");
-    buildPathToGoal();
-  }
-
-  public void updateFrontier() {
-    // update the frontier with all unvisited cells adjacent to visited cells
-    // if a cell is blocked, it is not added to the frontier
-	frontier.clear();
-	for (Cell c : knownCells) {
-		if (!visitedCells.contains(c) && c.status != CellStatus.BLOCKED) {
-			frontier.add(c);
+	public void clearCellPathfindingFields() {
+		for (Cell c : visitedCells) {
+			c.parent = null;
+			c.depth = updateDepth(c);
 		}
 	}
-  }
 
-  private VacuumAction getNextMove() {
-    // returns the next move based on the next cell in the path
-    // if the path is empty, stop
-    // update x and y
-    if (path.isEmpty()) {
-      return VacuumAction.STOP;
-    }
-    Cell nextCell = path.remove();
-    if (nextCell.x == x) {
-      if (nextCell.y == y - 1) {
-        y--;
-        return VacuumAction.FORWARD;
-      } else if (nextCell.y == y + 1) {
-        y++;
-        return VacuumAction.BACK;
-      }
-    } else if (nextCell.y == y) {
-      if (nextCell.x == x - 1) {
-        x--;
-        return VacuumAction.LEFT;
-      } else if (nextCell.x == x + 1) {
-        x++;
-        return VacuumAction.RIGHT;
-      }
-    }
-    return VacuumAction.STOP;
-  }
+	public void updateGoalCell() {
+		// choose a new goal cell from the frontier
+		// Clear path and cell pathfinding fields before updating goalCell
+		path.clear();
+		clearCellPathfindingFields();
+		updateFrontier();
+		if(!frontier.isEmpty())
+			goalCell = frontier.remove();
+		System.out.println("New Goal Cell: (" + goalCell.x + ", " + goalCell.y + ")");
+	}
 
-  private void checkNeighbors(VacuumBumpPercept percept) {
-      Cell left = grid[x -1][y];
-      Cell right = grid[x +1][y];
-      Cell forawrd = grid[x][y - 1];
-      Cell back = grid[x][y + 1];
-      
-    // check neighbors for blocked cells
-    if (percept.willBump(VacuumAction.LEFT)) {
-      left.status = CellStatus.BLOCKED;
-    }
-    knownCells.add(left);
+	public void updateFrontier() {
+		frontier.clear();
+		for (Cell c : knownCells) {
+			if (!visitedCells.contains(c) && c.status != CellStatus.BLOCKED) {
+				frontier.add(c);
+			}
+		}
+	}
 
-    if (percept.willBump(VacuumAction.RIGHT)) {
-        right.status = CellStatus.BLOCKED;
-    }
-    knownCells.add(right);
+	private VacuumAction getNextMove() {
+		// returns the next move based on the next cell in the path
+		// if the path is empty, stop
+		// update x and y
+		if (path.isEmpty()) {
+			return VacuumAction.STOP;
+		}
+		Cell nextCell = path.remove();
+		if (nextCell.x == x) {
+			if (nextCell.y == y - 1) {
+				y--;
+				return VacuumAction.FORWARD;
+			} else if (nextCell.y == y + 1) {
+				y++;
+				return VacuumAction.BACK;
+			}
+		} else if (nextCell.y == y) {
+			if (nextCell.x == x - 1) {
+				x--;
+				return VacuumAction.LEFT;
+			} else if (nextCell.x == x + 1) {
+				x++;
+				return VacuumAction.RIGHT;
+			}
+		}
+		return VacuumAction.STOP;
+	}
 
-    if (percept.willBump(VacuumAction.FORWARD)) {
-    	forawrd.status = CellStatus.BLOCKED;
-    }
-    knownCells.add(forawrd);
+	private void checkNeighbors(VacuumBumpPercept percept) {
+		Cell left = grid[x - 1][y];
+		Cell right = grid[x + 1][y];
+		Cell forward = grid[x][y - 1];
+		Cell back = grid[x][y + 1];
 
-    if (percept.willBump(VacuumAction.BACK)) {
-        back.status = CellStatus.BLOCKED;
-    }
-    knownCells.add(back); 
-  }
+		// check neighbors for blocked cells
+		if (percept.willBump(VacuumAction.LEFT)) {
+			left.status = CellStatus.BLOCKED;
+		}
+		knownCells.add(left);
 
-  @Override
-  public VacuumAction getAction(VacuumPercept percept) {
-    if (percept instanceof VacuumBumpPercept)
-      return getActionModelReflex((VacuumBumpPercept) percept);
-    else {
-      System.out.println("Error:  Expected a Bump Percept!!");
-      return VacuumAction.STOP;
-    }
-  }
+		if (percept.willBump(VacuumAction.RIGHT)) {
+			right.status = CellStatus.BLOCKED;
+		}
+		knownCells.add(right);
 
-  /** This gets called on every step of the simulation */
-  private VacuumAction getActionModelReflex(VacuumBumpPercept percept) {
-	  System.out.printf("Time: %d\n", timeStep++);
-	// mark current cell as visited
-	currentCell = grid[x][y];
-    currentCell.status = CellStatus.VISITED;
-	knownCells.add(currentCell);
-	visitedCells.add(currentCell);
-	
-	// process percept and update internal state
-    checkNeighbors(percept);
-    updateFrontier();
-    
-    if (currentCell == goalCell || goalCell == null) { // pick a new goal
-      updateGoalCell();
-    }
-    
-    if (percept.currentStatus == Status.DIRTY) { // if cell is dirty, clean it
-      return VacuumAction.SUCK;
-    } else { // otherwise get the next move
-      VacuumAction action = getNextMove();
-      return action;
-    }
-  }
+		if (percept.willBump(VacuumAction.FORWARD)) {
+			forward.status = CellStatus.BLOCKED;
+		}
+		knownCells.add(forward);
 
-  private class Cell {
-    public int x;
-    public int y;
-    public int depth;
-    public Cell parent;
-    public CellStatus status;
+		if (percept.willBump(VacuumAction.BACK)) {
+			back.status = CellStatus.BLOCKED;
+		}
+		knownCells.add(back);
+	}
 
-    public Cell(int x, int y, CellStatus status) {
-      this.x = x;
-      this.y = y;
-      this.depth = 0;
-      this.status = status;
-    }
-  }
+	@Override
+	public VacuumAction getAction(VacuumPercept percept) {
+		if (percept instanceof VacuumBumpPercept)
+			return getActionModelReflex((VacuumBumpPercept) percept);
+		else {
+			System.out.println("Error:  Expected a Bump Percept!!");
+			return VacuumAction.STOP;
+		}
+	}
 
-  private enum CellStatus {
-    UNVISITED,
-    VISITED,
-    BLOCKED,
-  }
+	/** This gets called on every step of the simulation */
+	private VacuumAction getActionModelReflex(VacuumBumpPercept percept) {
+		System.out.printf("Time: %d\n", timeStep++);
+		// mark current cell as visited
+		currentCell = grid[x][y];
+		currentCell.status = CellStatus.VISITED;
+		knownCells.add(currentCell);
+		visitedCells.add(currentCell);
+
+		if (frontier.contains(currentCell))
+			frontier.remove(currentCell);
+
+		// process percept and update internal state
+		checkNeighbors(percept);
+		updateFrontier();
+
+		if (percept.currentStatus == Status.DIRTY) { // if cell is dirty, clean it
+			System.out.println("CLEANING: " + currentCell);
+			return VacuumAction.SUCK;
+		}
+		// otherwise get the next move
+		if (currentCell == goalCell || goalCell == null) { // pick a new goal
+			updateGoalCell();
+			buildPathToGoal();
+		}
+		VacuumAction action = getNextMove();
+		return action;
+	}
+
+	private class Cell {
+		public int x;
+		public int y;
+		public int depth;
+		public Cell parent;
+		public CellStatus status;
+
+		public Cell(int x, int y, CellStatus status) {
+			this.x = x;
+			this.y = y;
+			this.depth = 0;
+			this.status = status;
+		}
+
+		@Override
+		public String toString() {
+			return String.format("Cell(%d, %d)", x, y);
+		}
+	}
+
+	private class CellComparator implements Comparator<Cell> {
+		@Override
+		public int compare(Cell c1, Cell c2) {
+			// compare cells by distance from current cell with
+			// closer cells having higher priority
+			return Math.abs(c1.x - x) + Math.abs(c1.y - y) - Math.abs(c2.x - x) - Math.abs(c2.y - y);
+		}
+	}
+
+	private enum CellStatus {
+		UNVISITED, VISITED, BLOCKED,
+	}
 }
