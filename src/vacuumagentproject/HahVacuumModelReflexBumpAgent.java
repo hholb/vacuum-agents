@@ -13,11 +13,13 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	Cell currentCell;
 	Cell goalCell;
 	PriorityQueue<Cell> frontier; // ordered by distance from current cell, rebuilt as needed
-	ArrayDeque<Cell> path; // path from vacuum to goal
+	ArrayDeque<Cell> path; // sequence of cells that form a path from vacuum to goal
 	Set<Cell> visitedCells;
 	Set<Cell> knownCells;
 	Set<Cell> blockedCells;
 	private int timeStep;
+	private static final int MAX_DEPTH = 2500; // maximum path-length for search
+
 
 	public HahVacuumModelReflexBumpAgent() {
 		super();
@@ -39,24 +41,26 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		blockedCells = new HashSet<>();
 	}
 
-	// Set a maximum depth for pathfinding
-	private static final int MAX_DEPTH = 2500;
-
-	public void buildPathToGoal() {
+	/**
+	 * Builds a path from currentCell to GoalCell through known cells.
+	 * A priority queue is used to determine which cells to visit first.
+	 * Cells are ordered by their distance from the goal, with cells closer to the goal having higher priority
+	 */
+	private void buildPathToGoal() {
+		// clean up before starting
 		path.clear();
 		clearCellPathfindingFields();
-		// build a path to the goalCell using shortest path through known cells
-		// using a priority queue to store cells to visit
-		// cells are ordered by their depth, with cells closer to the goal having higher  priority
-		// cells are visited in order of priority
+
+		// setup data structures for the search
 		PriorityQueue<Cell> queue = new PriorityQueue<>(new CellComparator());
 		Set<Cell> visited = new HashSet<>(); // cells visited during this search
 		queue.add(currentCell);
+		
+		// do a depth-first search and build path once a solution is found
 		while (!queue.isEmpty()) {
 			Cell c = queue.remove();
 			visited.add(c);
-			if (c == goalCell) {
-				// build path from goalCell to currentCell
+			if (c == goalCell) { // solution found, build path
 				Cell cell = goalCell;
 				while (cell != currentCell) {
 					path.addFirst(cell);
@@ -64,13 +68,11 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 				}
 				break;
 			}
-			if (c.depth > MAX_DEPTH) {
-				// if the cell is too far away, stop searching
+			if (c.depth > MAX_DEPTH) { // stop the search if it gets too deep
 				break;
 			}
-			for (Cell neighbor : getNeighbors(c)) {
+			for (Cell neighbor : getNeighbors(c)) { // add neighbors to queue
 				if (knownCells.contains(neighbor) && !blockedCells.contains(neighbor) && !visited.contains(neighbor)) {
-					// if the neighbor is not blocked and has not been visited, add it to the queue
 					neighbor.parent = c;
 					neighbor.depth = calculateDepth(c, neighbor);
 					queue.add(neighbor);
@@ -79,15 +81,20 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		}
 
 		// Print path for debugging
-		StringBuilder s = new StringBuilder();
-		s.append("PATH: ");
-		for (Cell cell : path) {
-			s.append(cell);
-		}
-		System.out.println(s);
+//		StringBuilder s = new StringBuilder();
+//		s.append("PATH: ");
+//		for (Cell cell : path) {
+//			s.append(cell);
+//		}
+//		System.out.println(s);
 	}
 
-	public List<Cell> getNeighbors(Cell cell) {
+	/**
+	 * Returns a list cell that neighbor the given cell.
+	 * @param cell
+	 * @return list of cell's neighbors
+	 */
+	private List<Cell> getNeighbors(Cell cell) {
 		List<Cell> neighbors = new ArrayList<>();
 		int x = cell.x;
 		int y = cell.y;
@@ -113,30 +120,48 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		return neighbors;
 	}
 
-	public int updateDepth(Cell c) {
-		// set cell depth based on its absolute distance from the current cell
+	/**
+	 * Determine cell depth based on its absolute distance from the current cell.
+	 * @param c
+	 * @return int depth
+	 */
+	private int updateDepth(Cell c) {
 		return Math.abs(c.x - x) + Math.abs(c.y - y);
 	}
 	
+	/**
+	 * Determine cell depth based on distance between given cells
+	 * @param c1 cell
+	 * @param c2 cell
+	 * @return int depth
+	 */
 	public int calculateDepth(Cell c1, Cell c2) {
 		return Math.abs(c1.x - c2.x) + Math.abs(c1.y - c2.y);
 	}
 
-	public void clearCellPathfindingFields() {
+	/**
+	 * Resets the cell attributes used for path finding
+	 */
+	private void clearCellPathfindingFields() {
 		for (Cell c : visitedCells) {
 			c.parent = null;
 			c.depth = updateDepth(c);
 		}
 	}
 
-	public void updateGoalCell() {
-		// choose a new goal cell from the frontier
+	/**
+	 * Chooses a new goal cell from the frontier
+	 */
+	private void updateGoalCell() {
 		updateFrontier();
 		if (!frontier.isEmpty())
 			goalCell = frontier.remove();
-		System.out.println("New Goal Cell: (" + goalCell.x + ", " + goalCell.y + ")");
+//		System.out.println("New Goal Cell: (" + goalCell.x + ", " + goalCell.y + ")");
 	}
 
+	/**
+	 * Rebuilds the frontier from known-unblocked cells that are unvisited.
+	 */
 	public void updateFrontier() {
 		frontier.clear();
 		for (Cell c : knownCells) {
@@ -146,10 +171,12 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		}
 	}
 
+	/**
+	 * Returns the next move action based on the next cell in the path.
+	 * Updates the x and y values for the vacuum based on the move
+	 * @return Move action, or stop if path is empty
+	 */
 	private VacuumAction getNextMove() {
-		// returns the next move based on the next cell in the path
-		// if the path is empty, stop
-		// update x and y
 		if (path.isEmpty()) {
 			return VacuumAction.STOP;
 		}
@@ -174,6 +201,10 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		return VacuumAction.STOP;
 	}
 
+	/**
+	 * Senses neighboring cells for obstacles and adds new cells to the internal sets knownCells and blockedCells
+	 * @param percept
+	 */
 	private void checkNeighbors(VacuumBumpPercept percept) {
 		Cell left = grid[x - 1][y];
 		Cell right = grid[x + 1][y];
@@ -184,21 +215,22 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		if (percept.willBump(VacuumAction.LEFT)) {
 			blockedCells.add(left);
 		}
-		knownCells.add(left);
 
 		if (percept.willBump(VacuumAction.RIGHT)) {
 			blockedCells.add(right);
 		}
-		knownCells.add(right);
 
 		if (percept.willBump(VacuumAction.FORWARD)) {
 			blockedCells.add(forward);
 		}
-		knownCells.add(forward);
 
 		if (percept.willBump(VacuumAction.BACK)) {
 			blockedCells.add(back);
 		}
+		
+		knownCells.add(left);
+		knownCells.add(right);
+		knownCells.add(forward);
 		knownCells.add(back);
 	}
 
@@ -212,39 +244,37 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 		}
 	}
 
-	/** This gets called on every step of the simulation */
 	private VacuumAction getActionModelReflex(VacuumBumpPercept percept) {
-		System.out.printf("Time: %d\n", timeStep++);
+		timeStep++;
+//		System.out.printf("Time: %d\n", timeStep);
 		currentCell = grid[x][y];
 		knownCells.add(currentCell);
 		visitedCells.add(currentCell);
 
-		if (frontier.contains(currentCell))
-			frontier.remove(currentCell);
-
-		// process percept and update internal state
+		// process percept and update frontier
 		checkNeighbors(percept);
 		updateFrontier();
 
 		if (percept.currentStatus == Status.DIRTY) { // if cell is dirty, clean it
-			System.out.println("CLEANING: " + currentCell);
+//			System.out.println("CLEANING: " + currentCell);
 			return VacuumAction.SUCK;
 		}
+		
 		// otherwise get the next move
-		if (currentCell == goalCell || goalCell == null) { // pick a new goal
+		if (currentCell == goalCell || goalCell == null) { // pick a new goal if we need to
 			updateGoalCell();
 			buildPathToGoal();
 		}
 		VacuumAction action = getNextMove();
-		System.out.println("MOVING: " + action.name());
+//		System.out.println("MOVING: " + action.name());
 		return action;
 	}
 
 	private class Cell {
 		public int x;
 		public int y;
-		public int depth;
-		public Cell parent;
+		public int depth; // used for path finding
+		public Cell parent; // used for path finding
 
 		public Cell(int x, int y) {
 			this.x = x;
@@ -259,10 +289,14 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	}
 
 	private class CellComparator implements Comparator<Cell> {
+		
+		/*
+		 * Compare cells by distance from current cell,
+		 * with closer cells having higher priority.
+		 */
 		@Override
 		public int compare(Cell c1, Cell c2) {
-			// compare cells by distance from current cell with
-			// closer cells having higher priority
+
 			return Math.abs(c1.x - x) + Math.abs(c1.y - y) - Math.abs(c2.x - x) - Math.abs(c2.y - y);
 		}
 	}
