@@ -10,13 +10,13 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	private Cell[][] grid;
 	private int x;
 	private int y;
-	Cell currentCell;
-	Cell goalCell;
-	PriorityQueue<Cell> frontier; // ordered by distance from current cell, rebuilt as needed
-	ArrayDeque<Cell> path; // sequence of cells that form a path from vacuum to goal
-	Set<Cell> visitedCells;
-	Set<Cell> knownCells;
-	Set<Cell> blockedCells;
+	private Cell currentCell;
+	private Cell goalCell;
+	private PriorityQueue<Cell> frontier; // ordered by distance from current cell, rebuilt as needed
+	private ArrayDeque<Cell> path; // sequence of cells that form a path from vacuum to goal
+	private Set<Cell> visitedCells;
+	private Set<Cell> knownCells;
+	private Set<Cell> blockedCells;
 	private int timeStep;
 	private static final int MAX_DEPTH = 2500; // maximum path-length for search
 
@@ -135,7 +135,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	 * @param c2 cell
 	 * @return int depth
 	 */
-	public int calculateDepth(Cell c1, Cell c2) {
+	private int calculateDepth(Cell c1, Cell c2) {
 		return Math.abs(c1.x - c2.x) + Math.abs(c1.y - c2.y);
 	}
 
@@ -162,7 +162,7 @@ public class HahVacuumModelReflexBumpAgent extends VacuumAgent {
 	/**
 	 * Rebuilds the frontier from known-unblocked cells that are unvisited.
 	 */
-	public void updateFrontier() {
+	private void updateFrontier() {
 		frontier.clear();
 		for (Cell c : knownCells) {
 			if (!visitedCells.contains(c) && !blockedCells.contains(c)) {
