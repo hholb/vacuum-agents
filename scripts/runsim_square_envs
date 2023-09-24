@@ -3,13 +3,13 @@
 # Run the simulation 10 times for the each agent type on different sized
 # environments. The results are saved in a csv file called results.csv
 
-CSV_FILE="results.csv"
+CSV_FILE="square_envs_results.csv"
 AGENTS=( "HahRandomAgent" "HahVacuumModelReflexBumpAgent" )
 ENVIRONMENT_SIZE=3
 NUM_RUNS=10
 
 if ! [[ -f $CSV_FILE ]]; then
-	echo "Environment Size,Agent Type,Run Number,Time Steps, Score" > $CSV_FILE
+    echo "environment,agent,run,time_steps,score" > $CSV_FILE
 fi
 
 for (( i=1; i<=$NUM_RUNS; i++ )); do
@@ -20,7 +20,8 @@ for (( i=1; i<=$NUM_RUNS; i++ )); do
 			# score should be final field of last line of output,
 			score=`echo "$output" | tail -n 1 | awk '{print $NF}'`
 			# final time step shoudl be the first field of the last line of output
-			time_steps=`echo "$output" | tail -n 1 | awk '{print $1}'`
+			# need to remove trailing colon
+			time_steps=`echo "$output" | tail -n 1 | awk '{print $1}' | sed 's/.$//'`
 			echo "$j,$agent,$i,$time_steps,$score" >> $CSV_FILE
 		done
 	done

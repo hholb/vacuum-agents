@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+# Run the simulation 10x for each map in ../environments/non_square
+# and output the results to a CSV file
+
+CSV_FILE="nonsquare_envs_comparison_results.csv"
+AGENTS=( "TPVacuumModelReflexLocAgent" "HahVacuumModelReflexBumpAgent" )
+NUM_RUNS=10
+
+if ! [[ -f $CSV_FILE ]]; then
+    echo "environment,agent,run,time_steps,score" > $CSV_FILE
+fi
+
+for file in environments/non_square/*; do
+	for agent in "${AGENTS[@]}"; do
+	    if [[ $agent == "TPVacuumModelReflexLocAgent" ]]; then
+		percept_type="-L"
+	    else
+		percept_type="-B"
+	    fi
+	    for (( run=1; run<=$NUM_RUNS; run++ )); do
+		    if [[ -f $file ]]; then
+			echo "Running $agent on $file, run $run"
+			output=$(gradlew -q run --args="-A $agent -g $file $percept_type")
+			# final time step is the first field of the last
+			# line of output
+			time_steps=`echo "$output" | tail -n 1 | awk '{print $1}' | sed 's/.$//'`
+			# score should be the last field of the last line of output
+			score=$(echo $output | awk '{print $NF}')
+			echo "$file,$agent,$run,$time_steps,$score" >> $CSV_FILE
+		    fi
+	    done
+	done
+done
